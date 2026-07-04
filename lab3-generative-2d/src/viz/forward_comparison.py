@@ -22,6 +22,7 @@ only, VE is instantiated with a smaller sigma_max (see VE_SIGMA_MAX below).
 The validated default is untouched everywhere else in the codebase.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -59,6 +60,17 @@ COLOR = "#4C72B0"
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "videos"
 KEYFRAME_DIR = PROJECT_ROOT / "outputs" / "sanity_checks"
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--distribution", default=DISTRIBUTION)
+    p.add_argument("--n_particles", type=int, default=N_PARTICLES)
+    p.add_argument("--n_frames", type=int, default=N_FRAMES)
+    p.add_argument("--fps", type=int, default=FPS)
+    p.add_argument("--seed", type=int, default=SEED)
+    p.add_argument("--ve_sigma_max", type=float, default=VE_SIGMA_MAX)
+    return p.parse_args()
 
 
 def build_frames():
@@ -136,6 +148,15 @@ def save_keyframes(all_frames, t_values, axis_limit, names):
 
 
 def main():
+    args = parse_args()
+    global DISTRIBUTION, N_PARTICLES, N_FRAMES, FPS, SEED, VE_SIGMA_MAX
+    DISTRIBUTION = args.distribution
+    N_PARTICLES = args.n_particles
+    N_FRAMES = args.n_frames
+    FPS = args.fps
+    SEED = args.seed
+    VE_SIGMA_MAX = args.ve_sigma_max
+
     all_frames, t_values, axis_limit, names = build_frames()
     print(f"axis_limit = +/-{axis_limit}")
 

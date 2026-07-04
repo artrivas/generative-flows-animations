@@ -6,6 +6,7 @@ numpy>=1.26.0
 matplotlib>=3.8.0
 Pillow>=10.0.0          # backend para gif export
 ffmpeg-python>=0.2.0    # wrapper para video mp4 via ffmpeg
+imageio-ffmpeg>=0.5.0   # bundled ffmpeg binary used by animation scripts
 
 # Scientific
 scipy>=1.12.0           # para KDE, estadísticas de validación

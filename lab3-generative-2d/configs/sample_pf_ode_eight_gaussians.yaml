@@ -1,0 +1,5 @@
+distribution: eight_gaussians
+model: eps_pred
+sampler: pf_ode
+steps: 250
+seed: 0

@@ -23,6 +23,7 @@ color intensity is therefore not directly comparable across frames, only
 the shape is.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -60,6 +61,18 @@ AXIS_LIMIT = 7.0  # fixed window; VP stays bounded (std<=1, x0 spread ~2-2.5)
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "videos"
 KEYFRAME_DIR = PROJECT_ROOT / "outputs" / "sanity_checks"
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--distribution", default=None, help="single distribution to render")
+    p.add_argument("--distributions", default=None, help="comma-separated distributions to render")
+    p.add_argument("--n_particles", type=int, default=N_PARTICLES)
+    p.add_argument("--n_frames", type=int, default=N_FRAMES)
+    p.add_argument("--fps", type=int, default=FPS)
+    p.add_argument("--seed", type=int, default=SEED)
+    p.add_argument("--axis_limit", type=float, default=AXIS_LIMIT)
+    return p.parse_args()
 
 
 def compute_density(x: np.ndarray, bins: int, limit: float) -> np.ndarray:
@@ -145,6 +158,18 @@ def render(dist_name: str):
 
 
 def main():
+    args = parse_args()
+    global DISTRIBUTIONS, N_PARTICLES, N_FRAMES, FPS, SEED, AXIS_LIMIT
+    if args.distribution is not None:
+        DISTRIBUTIONS = [args.distribution]
+    elif args.distributions is not None:
+        DISTRIBUTIONS = [item.strip() for item in args.distributions.split(",") if item.strip()]
+    N_PARTICLES = args.n_particles
+    N_FRAMES = args.n_frames
+    FPS = args.fps
+    SEED = args.seed
+    AXIS_LIMIT = args.axis_limit
+
     for dist_name in DISTRIBUTIONS:
         render(dist_name)
 

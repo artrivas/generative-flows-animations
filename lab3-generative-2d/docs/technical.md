@@ -362,3 +362,53 @@ son correctas.
 **Pendiente explícito para el paso 5b (Colab/GPU)**: entrenar el resto de
 distribuciones y la parametrización v-pred — no se hizo aquí, según lo
 acordado.
+
+**Actualización — paso 5b completado**: los 8 checkpoints (4 distribuciones ×
+{eps, v}, 30 000 pasos, batch 512, lr 1e-3, seed 0) se entrenaron en Colab
+(GPU T4) y están en `checkpoints/`.
+
+---
+
+## 7. Animaciones 3 y 4 (`src/viz/`) — Paso 6
+
+### Animación 3 — `forward_trajectories.py`
+
+40 partículas de `eight_gaussians`, proceso VP, mismo truco de $z$ fijo por
+partícula que las animaciones anteriores. Cada trayectoria se dibuja como
+una línea que **crece** con los frames (no solo la posición actual),
+manteniendo visible el recorrido completo.
+
+![Keyframes forward_trajectories](../outputs/sanity_checks/forward_trajectories_keyframes.png)
+
+**Verificación**: en t=0 las 40 partículas están en sus posiciones
+originales (8 modos reconocibles); en t=0.5 las trayectorias ya muestran
+curvas sustanciales hacia el centro; en t=1 las líneas se enredan en una
+maraña centrada en el origen — consistente con el colapso rápido del VP ya
+observado en el paso 3 (density_evolution). Eje ±4, sin clipping.
+
+Video: [`outputs/videos/forward_trajectories.mp4`](../outputs/videos/forward_trajectories.mp4)
+
+### Animación 4 — `score_field_animation.py`
+
+Carga un checkpoint entrenado (`eight_gaussians_eps_seed0.pt` por defecto),
+evalúa el score aprendido (vía `DenoiserWrapper`) sobre una grilla espacial
+fija en cada $t\in[0.02,1]$, superponiendo 800 partículas reales del
+proceso forward (mismo truco de $z$ fijo).
+
+![Keyframes score_field_animation](../outputs/sanity_checks/score_field_animation_eight_gaussians_eps_keyframes.png)
+
+**Verificación pedida — resultado**:
+- **t≈0**: el campo está claramente estructurado alrededor de los 8 modos, con magnitud grande lejos de los datos (amarillo) y pequeña cerca de cada modo (morado oscuro) — coherente con una densidad casi puntual.
+- **t≈0.5 y t≈1**: el campo ya es un patrón radial casi uniforme apuntando hacia el origen en ambos casos, prácticamente indistinguibles entre sí.
+
+**Nota importante (no es un bug)**: que t=0.51 y t=1.00 se vean casi
+idénticos —ambos ya colapsados— es consecuencia directa del schedule VP
+usado ($\beta_{\max}=20$), que ya vimos en el paso 3 que colapsa la
+estructura multimodal muy rápido (para t≈0.5, $\text{std}(0.5)\approx0.96$
+vs $\text{std}(1)\approx0.9999$, casi iguales). Esto es una característica
+real del forward process configurado, no una limitación del modelo ni un
+error de la conversión score — vale la pena mencionarlo en el informe como
+motivación para explorar un schedule con colapso más gradual (p. ej.
+$\beta_{\max}$ menor) si se quiere ilustrar mejor la transición intermedia.
+
+Video: [`outputs/videos/score_field.mp4`](../outputs/videos/score_field.mp4)
