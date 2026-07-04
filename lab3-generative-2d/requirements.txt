@@ -1,0 +1,22 @@
+# Core
+torch>=2.2.0
+numpy>=1.26.0
+
+# Plotting & animation
+matplotlib>=3.8.0
+Pillow>=10.0.0          # backend para gif export
+ffmpeg-python>=0.2.0    # wrapper para video mp4 via ffmpeg
+
+# Scientific
+scipy>=1.12.0           # para KDE, estadísticas de validación
+einops>=0.7.0           # manipulación de tensores limpia
+
+# Config management
+hydra-core>=1.3.0
+omegaconf>=2.3.0
+
+# Progress / logging
+tqdm>=4.66.0
+
+# Optional: aceleración ODE
+# torchdiffeq>=0.2.3    # descomentar si se usa dopri5 en el integrador
