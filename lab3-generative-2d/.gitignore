@@ -4,3 +4,6 @@ src/forward_process/__pycache__/
 src/models/__pycache__/
 src/training/__pycache__/
 checkpoints.zip
+src/training/__pycache__/train_score.cpython-314.pyc
+src/viz/__pycache__/
+src/sampling/__pycache__/

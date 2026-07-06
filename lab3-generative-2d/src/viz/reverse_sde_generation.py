@@ -2,8 +2,16 @@
 Animation 5: reverse-SDE generation from noise to data.
 
 The sampler starts from x(t=1) ~ N(0,I), integrates the reverse-time SDE
-back to t approx 0, and draws accumulated trajectories for a small particle
-subset so the stochastic path history remains visible.
+back to t approx 0, and draws trajectories for a small particle subset.
+
+CLUTTER FIX (post-hoc review, step 6): drawing the FULL accumulated history
+of a stochastic reverse-SDE path (a jagged random walk, unlike the smooth
+deterministic PF-ODE path) buried the final cluster structure in line
+noise -- confirmed by comparing against pf_ode_generation's clean result
+and against sampler_comparison's clean 8-cluster output for the same
+checkpoint. Fix: only draw a trailing window (comet-tail) of each path
+instead of the full history, and draw final-position markers larger, fully
+opaque, and on top (zorder) so the converged structure reads clearly.
 """
 
 import argparse
@@ -40,20 +48,29 @@ def parse_args():
     p.add_argument("--record_every", type=int, default=2)
     p.add_argument("--fps", type=int, default=24)
     p.add_argument("--axis_limit", type=float, default=6.5)
+    p.add_argument("--trail_length", type=int, default=25,
+                    help="max recorded points of trailing history drawn per particle (comet-tail)")
     return p.parse_args()
 
 
-def save_keyframes(trajectory, axis_limit, dist_name, param, colors):
+def trail_start(idx: int, trail_length: int) -> int:
+    return max(0, idx + 1 - trail_length)
+
+
+def save_keyframes(trajectory, axis_limit, dist_name, param, colors, trail_length):
     KEYFRAME_DIR.mkdir(parents=True, exist_ok=True)
     key_indices = [0, len(trajectory) // 2, len(trajectory) - 1]
     labels = ["noise", "mid", "data"]
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 5.5), dpi=110)
     for ax, idx, label in zip(axes, key_indices, labels):
+        start = trail_start(idx, trail_length)
         for p_idx in range(trajectory.shape[1]):
-            path = trajectory[: idx + 1, p_idx, :]
-            ax.plot(path[:, 0], path[:, 1], color=colors[p_idx], alpha=0.45, linewidth=0.8)
-            ax.scatter(path[-1, 0], path[-1, 1], color=colors[p_idx], s=16, edgecolor="black", linewidth=0.25)
+            path = trajectory[start: idx + 1, p_idx, :]
+            ax.plot(path[:, 0], path[:, 1], color=colors[p_idx], alpha=0.35, linewidth=0.6, zorder=2)
+        # final positions drawn last/on top, large and fully opaque
+        ax.scatter(trajectory[idx, :, 0], trajectory[idx, :, 1], color=colors, s=26,
+                   edgecolor="black", linewidth=0.4, zorder=5)
         ax.set_xlim(-axis_limit, axis_limit)
         ax.set_ylim(-axis_limit, axis_limit)
         ax.set_aspect("equal")
@@ -86,7 +103,7 @@ def main():
     )
 
     colors = plt.cm.hsv(np.linspace(0, 1, args.n_particles, endpoint=False))
-    save_keyframes(trajectory, args.axis_limit, dist_name, param, colors)
+    save_keyframes(trajectory, args.axis_limit, dist_name, param, colors, args.trail_length)
 
     fig, ax = plt.subplots(figsize=(7, 7), dpi=120)
     ax.set_xlim(-args.axis_limit, args.axis_limit)
@@ -95,19 +112,21 @@ def main():
     ax.grid(True, linewidth=0.3, alpha=0.4)
     title = ax.set_title("")
 
-    lines = [ax.plot([], [], color=colors[p], alpha=0.45, linewidth=0.8)[0] for p in range(args.n_particles)]
+    lines = [ax.plot([], [], color=colors[p], alpha=0.35, linewidth=0.6, zorder=2)[0] for p in range(args.n_particles)]
     points = ax.scatter(
         trajectory[0, :, 0],
         trajectory[0, :, 1],
         color=colors,
-        s=16,
+        s=26,
         edgecolor="black",
-        linewidth=0.25,
+        linewidth=0.4,
+        zorder=5,
     )
 
     def update(frame_idx):
+        start = trail_start(frame_idx, args.trail_length)
         for p_idx in range(args.n_particles):
-            path = trajectory[: frame_idx + 1, p_idx, :]
+            path = trajectory[start: frame_idx + 1, p_idx, :]
             lines[p_idx].set_data(path[:, 0], path[:, 1])
         points.set_offsets(trajectory[frame_idx])
         progress = frame_idx / max(1, len(trajectory) - 1)

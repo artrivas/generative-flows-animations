@@ -412,3 +412,106 @@ motivación para explorar un schedule con colapso más gradual (p. ej.
 $\beta_{\max}$ menor) si se quiere ilustrar mejor la transición intermedia.
 
 Video: [`outputs/videos/score_field.mp4`](../outputs/videos/score_field.mp4)
+
+---
+
+## 8. Revisión post-hoc y correcciones (paso 6, tras feedback directo del usuario)
+
+El usuario pidió una revisión honesta de los resultados y señaló 3 problemas
+reales, verificados extrayendo **frames reales de los mp4** (no solo los
+keyframes precalculados, para descartar que el bug estuviera solo en el
+script de keyframes y no en la animación real):
+
+1. **`forward_comparison` "no se mueve"**: confirmado parcialmente — sí
+   anima, pero con `beta_max=20` (default validado), VP y sub-VP terminan el
+   100% de su colapso visible dentro del primer ~25% del video (t<0.3) y el
+   ~75% restante muestra un blob prácticamente estático. Causa: nunca
+   apliqué a VP/sub-VP la misma lógica de ajuste de escala para
+   visualización que ya había aplicado a VE (`VE_SIGMA_MAX`). **Fix**:
+   `BETA_MAX_COMPARE=4.0` para VP y sub-VP en esta animación (mismo
+   principio, ya documentado, que `VE_SIGMA_MAX`). Beneficio adicional no
+   anticipado: con el colapso más gradual, ahora se distingue visualmente
+   sub-VP de VP en t=0.5 (antes ambos ya colapsaban idénticos, ocultando la
+   diferencia real de varianza entre ambos procesos).
+
+2. **Color de partículas en `score_field_animation` no distinguible**:
+   confirmado, bug real de diseño — puntos blancos con borde negro delgado
+   sobre fondo blanco y quiver viridis (oscuro cerca de los datos) eran casi
+   invisibles. **Fix**: color sólido `#FF1744` (carmesí), tamaño y alpha
+   aumentados — color ausente en la paleta viridis, por lo que se lee bien
+   contra cualquier región del campo.
+
+3. **`forward_trajectories` no se reconoce como la distribución original**:
+   confirmado — 40 partículas coloreadas con HSV independiente por índice
+   (arcoíris) impedían agrupar visualmente los 8 modos; se veían 40 puntos
+   de colores aleatorios, no 8 clusters. **Fix**: color por ángulo de cada
+   punto $x_0$ respecto al centroide de los datos, de forma que partículas
+   del mismo modo comparten tono similar. También se le aplicó el mismo fix
+   de pacing (`BETA_MAX_TRAJ=4.0`) por la misma razón que en (1).
+   `density_evolution` se verificó con frames reales del mp4 y **no**
+   presentaba este problema (eight_gaussians y two_moons se reconocen
+   correctamente en t=0).
+
+**Sobre usar Manim (3blue1brown) en vez de matplotlib**: se evaluó y se
+descartó. Manim está diseñado para animación matemática declarativa
+(ecuaciones, pruebas geométricas) donde cada elemento es un Mobject
+vectorial individual — con 1500-30 000 partículas por frame (como en
+`forward_comparison` o `density_evolution`), sería dramáticamente más lento
+que el dibujo vectorizado de matplotlib (blitting de arrays completos).
+Tampoco tiene soporte nativo para quiver fields calculados desde tensores
+de PyTorch. matplotlib.animation + ffmpeg es la herramienta estándar para
+este tipo de visualización científica numérica; los problemas reportados
+eran bugs de diseño (color, escala de parámetros para pacing), no una
+limitación de la librería usada.
+
+---
+
+## 9. Revisión de código (pasos 7+) y re-entrenamiento — auditoría de "¿esto es SOTA?"
+
+### 9.1 Hallazgos de código corregidos
+
+1. **Cita rota** (`src/sampling/utils.py`): `reverse_sde_forward_drift` citaba "NOTES.md sección 7" para la SDE reversa estocástica, pero esa sección solo documentaba la Probability Flow ODE. Se agregó la subsección "SDE reversa" a NOTES.md §7 con la fórmula completa (Anderson 1982 / Song et al. 2021 Eq. 6) y se corrigió la cita en el código.
+2. **Clutter visual en `reverse_sde_generation.py`**: dibujar el historial completo de 60 trayectorias estocásticas (caminatas aleatorias jagged) enterraba la estructura final de 8 clusters en ruido de líneas — confirmado comparando contra `pf_ode_generation` (determinista, limpio) y `sampler_comparison` (mismo checkpoint, resultado correcto). Fix: ventana de cola (`trail_length=25`, comet-tail) en vez de historial completo, más marcadores finales grandes y opacos con `zorder` alto.
+3. **Duplicación** entre `train_score.py` y `train_flow_matching.py`: ~40 líneas de guardado de checkpoint/CSV/plot de loss extraídas a `src/training/common.py::save_checkpoint_and_plot`.
+
+### 9.2 Re-entrenamiento local (sin Colab) — validación del argumento "es barato"
+
+Dado que el paso 2 del cálculo de Bayes (ver más abajo) y la evidencia de pasos anteriores mostraban que la loss se estanca dentro del primer 5-10% de los 30 000 pasos usados en Colab, se re-entrenaron los 12 modelos (4 distribuciones × {eps, v, flow_matching}) **localmente en CPU** con 4000 pasos (batch=512, lr=1e-3, seed=0) — sin necesidad de GPU:
+
+```
+python -m src.training.train_score --distribution <dist> --param <eps|v> --steps 4000 --batch_size 512 --lr 1e-3 --seed 0 --output-dir checkpoints
+python -m src.training.train_flow_matching --distribution <dist> --steps 4000 --batch_size 512 --lr 1e-3 --seed 0 --output-dir checkpoints
+```
+
+**Costo real**: ~10s de cómputo por modelo, ~2 minutos para los 12. Losses finales iguales o mejores que la corrida de 30 000 pasos en todos los casos (ver tabla), confirmando que el presupuesto original era ~10x mayor de lo necesario.
+
+### 9.3 Verificación rigurosa: ¿estamos en el óptimo de Bayes?
+
+Para `eight_gaussians` (mezcla de 8 gaussianas conocida) se calculó el **score exacto analíticamente** vía las responsabilidades posteriores de la mezcla, y de ahí el loss óptimo de Bayes (el mínimo teórico posible, no una aproximación):
+
+| Parametrización | Loss del modelo (4000 pasos) | Loss óptimo de Bayes | Diferencia |
+|---|---|---|---|
+| ε-pred | 0.344 | 0.328 | 4.9% |
+| v-pred | 3.038 | 3.020 | 0.6% |
+
+Ambos dentro de <5% del óptimo teórico — confirmado también visualmente vía `sampler_comparison_eight_gaussians_eps.png` (reverse-SDE y PF-ODE reproducen los 8 clusters con energy distance 0.02-0.04). Nota sobre por qué v-pred/Flow Matching tienen valores de loss numéricamente mayores (~3.0 vs ~0.3 de ε-pred): el objetivo `v = α(t)ε - σ(t)x₀` incluye el término `σ(t)·x₀`, con escala natural mucho mayor que ε (que siempre es ruido unitario) — comparar las magnitudes directamente es comparar escalas distintas, no calidad distinta.
+
+**`two_moons` y `checkerboard`** se verificaron visualmente (sin cálculo de Bayes exacto, al no ser mezclas gaussianas simples): ambos reproducen su forma correctamente con energy distance baja (0.008-0.12) — ver `sampler_comparison_two_moons_eps.png`, `sampler_comparison_checkerboard_eps.png`.
+
+### 9.4 Hallazgo importante: `pinwheel` NO alcanza SOTA — limitación real, no un bug de esta sesión
+
+Al revisar visualmente `sampler_comparison_pinwheel_eps.png`, ni el reverse-SDE ni el PF-ODE reproducen la estructura de 5 brazos espirales — ambos generan una nube isotrópica ("blob") centrada en el origen. La **energy distance se veía baja (0.005-0.04)** a pesar de esto, porque esa métrica es dominada por la dispersión radial/global y es poco sensible a la pérdida de estructura angular — **limitación real del método de validación** en `scripts/validate_samplers.py` / `steps_comparison.py`, que no detecta este tipo de falla.
+
+Se investigaron 4 hipótesis, cada una entrenada y verificada visualmente:
+
+| Hipótesis probada | Resultado |
+|---|---|
+| Más pasos (20 000 en vez de 4000) | Sin cambio — sigue siendo un blob |
+| Más capacidad (hidden=256, 6 capas) | Sin cambio |
+| Sesgo de muestreo de $t$ hacia valores pequeños (`t=u²`, `t=u³`) | Mejora parcial/inconsistente, no resuelve |
+| Embedding de Fourier en las coordenadas de entrada (no solo en $t$) | Introdujo artefactos de grilla (periodicidad axis-aligned), tampoco resolvió |
+| **Recreación exacta de la receta original (30 000 pasos, arquitectura vanilla)** | **Confirma que el checkpoint original de Colab probablemente tenía este mismo problema** — no es una regresión introducida por acortar a 4000 pasos en esta sesión |
+
+**Hipótesis de causa raíz (no verificada, pendiente)**: el pinwheel tiene estructura angular muy fina (`angular_std=0.04` rad) — mucho más alta frecuencia que los 8 blobs o la curva de two_moons. Un MLP con embeddings axis-aligned (Cartesiano o Fourier estándar) puede tener "sesgo espectral" para representar esta componente rotacional; un embedding consciente de la geometría polar/rotacional (r, θ) en vez de (x, y) sería la vía más prometedora, junto con posible reponderación de la loss por SNR (similar a min-SNR-γ en la literatura de difusión) para priorizar el aprendizaje en t pequeño donde vive el detalle fino.
+
+**Estado**: se documenta como limitación conocida, no se fuerza una solución improvisada. El checkpoint actual (`pinwheel_eps_seed0.pt`, 4000 pasos) es equivalente en calidad al que había antes — no hay regresión, pero tampoco se resolvió el problema subyacente.

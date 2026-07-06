@@ -13,6 +13,13 @@ uniform "pull toward the origin" field, since eps/v-prediction at t~1 must
 approximate x_t itself (the process has erased the data signal by then) --
 score = -eps/std ~ -x_t/std.
 
+COLOR FIX: particles were originally drawn white with a thin black edge,
+which is nearly invisible against a white background and a viridis quiver
+(dark purple/blue near the data) -- confirmed unreadable when a real
+rendered frame was inspected. Now drawn solid crimson (#FF1744, alpha=0.85),
+a color absent from viridis, so it reads clearly against every part of the
+field.
+
 Usage:
     python -m src.viz.score_field_animation --checkpoint checkpoints/eight_gaussians_eps_seed0.pt
 """
@@ -118,7 +125,7 @@ def save_keyframes(dist_name, param, args, XX, YY, t_values, all_U, all_V, all_m
         Vn = all_V[idx] / (all_mag[idx] + 1e-8)
         q = ax.quiver(XX, YY, Un, Vn, all_mag[idx], cmap="viridis", scale=25, width=0.004, clim=(0, vmax_global))
         pts = all_particles[idx]
-        ax.scatter(pts[:, 0], pts[:, 1], s=4, alpha=0.35, color="white", edgecolor="black", linewidth=0.15)
+        ax.scatter(pts[:, 0], pts[:, 1], s=6, alpha=0.85, color="#FF1744", edgecolor="black", linewidth=0.2, zorder=5)
         ax.set_xlim(-args.grid_limit, args.grid_limit)
         ax.set_ylim(-args.grid_limit, args.grid_limit)
         ax.set_aspect("equal")
@@ -146,8 +153,8 @@ def main():
     Un0 = all_U[0] / (all_mag[0] + 1e-8)
     Vn0 = all_V[0] / (all_mag[0] + 1e-8)
     q = ax.quiver(XX, YY, Un0, Vn0, all_mag[0], cmap="viridis", scale=25, width=0.004, clim=(0, vmax_global))
-    scat = ax.scatter(all_particles[0][:, 0], all_particles[0][:, 1], s=4, alpha=0.35,
-                       color="white", edgecolor="black", linewidth=0.15)
+    scat = ax.scatter(all_particles[0][:, 0], all_particles[0][:, 1], s=6, alpha=0.85,
+                       color="#FF1744", edgecolor="black", linewidth=0.2, zorder=5)
     ax.set_xlim(-args.grid_limit, args.grid_limit)
     ax.set_ylim(-args.grid_limit, args.grid_limit)
     ax.set_aspect("equal")

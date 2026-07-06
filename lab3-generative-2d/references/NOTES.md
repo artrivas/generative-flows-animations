@@ -234,6 +234,21 @@ $$
 
 **Archivo/clase de implementación**: `src/integrators/ode_integrator.py` → clase `ProbabilityFlowODE`
 
+### SDE reversa (estocástica, distinta de la Probability Flow ODE)
+
+**Fuente**: Anderson 1982 (resultado general de reversión de SDEs); Song et al. 2021, Eq. (6).  
+⚠️ *No verificado contra PDF — número de ecuación pendiente de revisión manual. Agregado en el paso 6 (revisión post-hoc) porque el código de `src/sampling/reverse_sde.py` la usa y citaba erróneamente esta sección sin que la fórmula estuviera transcrita aquí.*
+
+Además de la ODE determinista (arriba), Song et al. 2021 muestran que el proceso reverso también puede escribirse como una SDE estocástica con las **mismas marginales** $p_t$ que el forward SDE:
+
+$$
+d\mathbf{x} = \left[f(\mathbf{x},t) - g(t)^2\,\nabla_{\mathbf{x}}\log p_t(\mathbf{x})\right]dt + g(t)\,d\bar{\mathbf{w}}
+$$
+
+donde $\bar{\mathbf{w}}$ es un proceso de Wiener en tiempo reverso. Nótese el coeficiente $g(t)^2$ completo (no $\frac{1}{2}g(t)^2$ como en la PF-ODE) — la diferencia es exactamente el término de ruido adicional $g(t)\,d\bar{\mathbf{w}}$.
+
+**Archivo/clase de implementación**: `src/sampling/reverse_sde.py` → función `sample_reverse_sde`; `src/sampling/utils.py` → función `reverse_sde_forward_drift`
+
 ---
 
 ## 8. Flow Matching

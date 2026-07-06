@@ -10,6 +10,20 @@ x_t(z) = mean(t) + std(t) * z, z ~ N(0, I) fixed per particle. This
 reproduces the exact VP marginal at every t while producing smooth,
 continuous-looking paths (independent resampling per frame would not
 trace a coherent trajectory -- it would look like teleporting dots).
+
+TWO FIXES applied after review:
+1. PACING: the validated beta_max=20 default collapses VP's visible spread
+   within the first ~25% of [0,1] (same issue found in forward_comparison.py),
+   leaving the rest of the video looking static. Reduced to BETA_MAX_TRAJ for
+   this visualization only.
+2. COLOR: particles were colored by an arbitrary per-particle HSV index
+   (rainbow), which actively hides the source distribution's shape -- 40
+   independently-colored dots don't read as "8 gaussian clusters" the way a
+   single-color scatter does. Now colored by the ANGLE of each x0 point
+   around the data centroid, so spatially-close particles (same cluster)
+   get similar hues -- the t=0 frame reads as clusters of similar color,
+   not 40 unrelated dots, while still giving enough hue variety to follow
+   individual trajectories.
 """
 
 import argparse
@@ -43,6 +57,7 @@ N_PARTICLES = 40
 N_FRAMES = 150
 FPS = 24
 SEED = 3
+BETA_MAX_TRAJ = 4.0  # reduced from validated default (20) -- see module docstring, pacing fix
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "videos"
 KEYFRAME_DIR = PROJECT_ROOT / "outputs" / "sanity_checks"
@@ -55,7 +70,21 @@ def parse_args():
     p.add_argument("--n_frames", type=int, default=N_FRAMES)
     p.add_argument("--fps", type=int, default=FPS)
     p.add_argument("--seed", type=int, default=SEED)
+    p.add_argument("--beta_max", type=float, default=BETA_MAX_TRAJ)
     return p.parse_args()
+
+
+def colors_by_position(x0_np: np.ndarray) -> np.ndarray:
+    """
+    Hue = angle of each x0 point around the data centroid. Spatially close
+    points (e.g. the same gaussian mode) get similar hues, so the t=0 frame
+    reads as recognizable clusters instead of arbitrary rainbow dots.
+    """
+    centroid = x0_np.mean(axis=0)
+    delta = x0_np - centroid
+    angles = np.arctan2(delta[:, 1], delta[:, 0])
+    hues = (angles + np.pi) / (2 * np.pi)
+    return plt.cm.hsv(hues)
 
 
 def build_trajectories():
@@ -65,7 +94,7 @@ def build_trajectories():
     x0 = torch.from_numpy(x0_np).float()
 
     z = torch.randn(N_PARTICLES, 2)  # fixed per-particle noise, reused across all frames
-    process = VPSDE()
+    process = VPSDE(beta_max=BETA_MAX_TRAJ)
 
     t_values = np.linspace(0.0, 1.0, N_FRAMES)
     positions = np.zeros((N_FRAMES, N_PARTICLES, 2))
@@ -77,7 +106,9 @@ def build_trajectories():
     limit_raw = np.percentile(np.abs(positions.reshape(-1)), 99.5) * 1.15
     axis_limit = float(np.ceil(limit_raw / 2.0) * 2.0)
 
-    return positions, t_values, axis_limit
+    colors = colors_by_position(x0_np)
+
+    return positions, t_values, axis_limit, colors
 
 
 def save_keyframes(positions, t_values, axis_limit, colors):
@@ -106,16 +137,16 @@ def save_keyframes(positions, t_values, axis_limit, colors):
 
 def main():
     args = parse_args()
-    global DISTRIBUTION, N_PARTICLES, N_FRAMES, FPS, SEED
+    global DISTRIBUTION, N_PARTICLES, N_FRAMES, FPS, SEED, BETA_MAX_TRAJ
     DISTRIBUTION = args.distribution
     N_PARTICLES = args.n_particles
     N_FRAMES = args.n_frames
     FPS = args.fps
     SEED = args.seed
+    BETA_MAX_TRAJ = args.beta_max
 
-    positions, t_values, axis_limit = build_trajectories()
+    positions, t_values, axis_limit, colors = build_trajectories()
     print(f"axis_limit = +/-{axis_limit}")
-    colors = plt.cm.hsv(np.linspace(0, 1, N_PARTICLES, endpoint=False))
 
     save_keyframes(positions, t_values, axis_limit, colors)
 

@@ -72,7 +72,9 @@ def reverse_sde_forward_drift(wrapper, process, x: torch.Tensor, t: torch.Tensor
     """
     Forward-time drift of the reverse-time SDE.
 
-    NOTES.md section 7 / Song et al. reverse SDE:
+    NOTES.md section 7, "SDE reversa" subsection (added post-hoc in step 6
+    review; this formula was previously miscited to the PF-ODE part of
+    section 7) / Anderson 1982, Song et al. 2021 Eq. 6:
         dx = [f(x,t) - g(t)^2 score_t(x)] dt + g(t) d w_bar
 
     Sampling integrates this equation backward in t via positive reverse time

@@ -21,12 +21,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 
 from src.data.registry import get_distribution
 from src.models.velocity_field import VelocityField
+from src.training.common import save_checkpoint_and_plot
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -99,36 +98,16 @@ def main():
             elapsed = time.time() - t0
             print(f"[step {step:>6}/{total_steps}] loss={loss.item():.5f} elapsed={elapsed:.1f}s")
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     ckpt_name = f"{args.distribution}_flow_matching_seed{args.seed}"
-    ckpt_path = out_dir / f"{ckpt_name}.pt"
-    torch.save({"model_state_dict": model.state_dict(), "config": vars(args)}, ckpt_path)
-    print(f"Saved checkpoint to {ckpt_path}")
-
-    log_path = out_dir / f"{ckpt_name}_losses.csv"
-    np.savetxt(log_path, np.array(loss_history), delimiter=",", header="loss", comments="")
-    print(f"Saved loss log to {log_path}")
-
-    fig, ax = plt.subplots(figsize=(6, 4.5), dpi=120)
-    ax.plot(loss_history, linewidth=0.7, alpha=0.5, label="raw")
-    window = max(1, total_steps // 50)
-    if len(loss_history) >= window:
-        smoothed = np.convolve(loss_history, np.ones(window) / window, mode="valid")
-        ax.plot(np.arange(window - 1, len(loss_history)), smoothed, linewidth=1.5, label=f"smoothed (w={window})")
-    ax.set_xlabel("step")
-    ax.set_ylabel("loss")
-    ax.set_yscale("log")
-    ax.set_title(f"Flow Matching loss - {args.distribution}")
-    ax.legend()
-    ax.grid(True, linewidth=0.3, alpha=0.5)
-    fig.tight_layout()
-
-    plot_path = PROJECT_ROOT / "outputs" / "sanity_checks" / f"{ckpt_name}_loss_curve.png"
-    plot_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(plot_path, dpi=120, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved loss curve to {plot_path}")
+    save_checkpoint_and_plot(
+        model=model,
+        config=vars(args),
+        loss_history=loss_history,
+        ckpt_name=ckpt_name,
+        out_dir=Path(args.out_dir),
+        project_root=PROJECT_ROOT,
+        title=f"Flow Matching loss - {args.distribution}",
+    )
 
 
 if __name__ == "__main__":

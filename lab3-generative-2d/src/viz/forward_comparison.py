@@ -20,6 +20,17 @@ that of VP/sub-VP (~1), which would force shared axis limits so wide that
 VP/sub-VP collapse to an invisible dot. For THIS side-by-side visualization
 only, VE is instantiated with a smaller sigma_max (see VE_SIGMA_MAX below).
 The validated default is untouched everywhere else in the codebase.
+
+PACING FIX: the validated default beta_max=20 (from step 2) makes VP/sub-VP
+finish essentially their ENTIRE visible collapse within the first ~25% of
+the [0,1] range (std(0.3)~0.78, std(1)~0.9999 -- barely distinguishable),
+so a linearly-timed animation spent ~75% of its frames on an already-static
+blob. This was flagged as "doesn't seem to move" and confirmed by
+extracting real frames from the rendered mp4. Fix: use a smaller
+beta_max (BETA_MAX_COMPARE) for VP/sub-VP in THIS comparison only -- same
+principle already applied to VE_SIGMA_MAX above, just not applied
+consistently the first time. The validated beta_max=20 default is untouched
+everywhere else (forward_process validation, training, etc).
 """
 
 import argparse
@@ -54,6 +65,7 @@ N_FRAMES = 120
 FPS = 24
 SEED = 7
 VE_SIGMA_MAX = 4.0  # reduced from validated default (50) -- see module docstring
+BETA_MAX_COMPARE = 4.0  # reduced from validated default (20) -- see module docstring, pacing fix
 POINT_SIZE = 5
 ALPHA = 0.5
 COLOR = "#4C72B0"
@@ -70,6 +82,7 @@ def parse_args():
     p.add_argument("--fps", type=int, default=FPS)
     p.add_argument("--seed", type=int, default=SEED)
     p.add_argument("--ve_sigma_max", type=float, default=VE_SIGMA_MAX)
+    p.add_argument("--beta_max_compare", type=float, default=BETA_MAX_COMPARE)
     return p.parse_args()
 
 
@@ -84,9 +97,9 @@ def build_frames():
     z = torch.randn(N_PARTICLES, 2)  # fixed per-particle noise, reused across t and processes
 
     processes = {
-        "VP": VPSDE(),
+        "VP": VPSDE(beta_max=BETA_MAX_COMPARE),
         "VE": VESDE(sigma_max=VE_SIGMA_MAX),
-        "sub-VP": SubVPSDE(),
+        "sub-VP": SubVPSDE(beta_max=BETA_MAX_COMPARE),
     }
 
     t_values = np.linspace(0.0, 1.0, N_FRAMES)
@@ -149,13 +162,14 @@ def save_keyframes(all_frames, t_values, axis_limit, names):
 
 def main():
     args = parse_args()
-    global DISTRIBUTION, N_PARTICLES, N_FRAMES, FPS, SEED, VE_SIGMA_MAX
+    global DISTRIBUTION, N_PARTICLES, N_FRAMES, FPS, SEED, VE_SIGMA_MAX, BETA_MAX_COMPARE
     DISTRIBUTION = args.distribution
     N_PARTICLES = args.n_particles
     N_FRAMES = args.n_frames
     FPS = args.fps
     SEED = args.seed
     VE_SIGMA_MAX = args.ve_sigma_max
+    BETA_MAX_COMPARE = args.beta_max_compare
 
     all_frames, t_values, axis_limit, names = build_frames()
     print(f"axis_limit = +/-{axis_limit}")
