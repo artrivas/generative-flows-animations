@@ -54,6 +54,20 @@ def parse_args():
     p.add_argument("--t_min", type=float, default=1e-5)
     p.add_argument("--log_every", type=int, default=100)
     p.add_argument("--output-dir", dest="out_dir", default=str(PROJECT_ROOT / "checkpoints"))
+    p.add_argument(
+        "--snr_gamma", type=float, default=None,
+        help="if set, apply SNR-based loss reweighting (docs/technical.md §9.4): "
+             "weight(t) = min(SNR(t), snr_gamma), SNR(t) = alpha(t)^2/std(t)^2, "
+             "which upweights small-t/high-SNR samples (capped for stability) "
+             "instead of the standard Hang et al. 2023 min-SNR-gamma direction "
+             "(which downweights them) -- see the comment at the loss computation. "
+             "None (default) = uniform per-t weighting, unchanged from before.",
+    )
+    p.add_argument(
+        "--tag", default="",
+        help="optional suffix appended to the checkpoint name (e.g. 'snr') to avoid "
+             "overwriting an existing checkpoint for the same distribution/param/seed",
+    )
     return p.parse_args()
 
 
@@ -101,7 +115,19 @@ def main():
         target = build_target(args.param, x0, noise, alpha, std)
 
         pred = model(x_t, t)
-        loss = ((pred - target) ** 2).mean()
+        per_sample_loss = ((pred - target) ** 2).mean(dim=-1)
+        if args.snr_gamma is not None:
+            # docs/technical.md §9.4's hypothesis: pinwheel's fine angular structure
+            # (angular_std=0.04 rad) only survives at small t (high SNR); uniform-t
+            # eps-loss gives that regime no more weight than the easy, structure-free
+            # large-t region. Upweight small-t/high-SNR samples (capped at snr_gamma
+            # for stability, since SNR -> inf as t -> 0) instead of using the
+            # Hang et al. 2023 min(SNR,gamma)/SNR form, which weights in the opposite
+            # direction (it DOWN-weights small-t) and would fight the stated goal.
+            snr = (alpha[:, 0] ** 2) / (std[:, 0] ** 2)
+            weight = torch.clamp(snr, max=args.snr_gamma)
+            per_sample_loss = per_sample_loss * weight
+        loss = per_sample_loss.mean()
 
         optimizer.zero_grad()
         loss.backward()
@@ -113,6 +139,8 @@ def main():
             print(f"[step {step:>6}/{total_steps}] loss={loss.item():.5f}  elapsed={elapsed:.1f}s")
 
     ckpt_name = f"{args.distribution}_{args.param}_seed{args.seed}"
+    if args.tag:
+        ckpt_name = f"{ckpt_name}_{args.tag}"
     save_checkpoint_and_plot(
         model=model,
         config=vars(args),

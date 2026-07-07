@@ -200,7 +200,7 @@ $$
 ### Conversión v → score
 
 $$
-\nabla_{\mathbf{x}_t}\log p_t(\mathbf{x}_t) = -\frac{\boldsymbol{\varepsilon}_\theta(\mathbf{x}_t,t)}{\sqrt{1-\bar{\alpha}_t}} = -\frac{\sqrt{\bar{\alpha}_t}\,\mathbf{v}_\theta(\mathbf{x}_t,t) + \sqrt{1-\bar{\alpha}_t}\,\mathbf{x}_t}{1-\bar{\alpha}_t}
+\nabla_{\mathbf{x}_t}\log p_t(\mathbf{x}_t) = -\frac{\boldsymbol{\varepsilon}_\theta(\mathbf{x}_t,t)}{\sqrt{1-\bar{\alpha}_t}} = -\frac{\sqrt{\bar{\alpha}_t}\,\mathbf{v}_\theta(\mathbf{x}_t,t) + \sqrt{1-\bar{\alpha}_t}\,\mathbf{x}_t}{\sqrt{1-\bar{\alpha}_t}}
 $$
 
 **Archivo/clase de implementación**: `src/models/score_net.py` → clase `VNet`, función `v_to_score`

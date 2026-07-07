@@ -1,12 +1,17 @@
 """
 Animation/Figure 8: compare final sample quality as integration steps N vary.
 
-Creates a 2 x len(N) grid:
-    row 1: Probability Flow ODE
-    row 2: Flow Matching ODE
+The PNG is a static 2 x len(N) grid (row 1: Probability Flow ODE, row 2:
+Flow Matching ODE) and is the main quantitative inspection artifact.
 
-The PNG is the main inspection artifact. A short static MP4 with the same
-grid is also saved so outputs/videos contains an artifact for animation 8.
+The MP4 is a genuine animation over the SAME precomputed per-N samples: it
+sweeps N low -> high, holding each step count on screen for HOLD_FRAMES
+frames (with a brief fade-in "formation" effect) while updating the
+on-screen energy-distance readout, so the point cloud visibly tightens
+toward the real-data reference (drawn faint/static in the background) as N
+increases. Earlier version of this file animated nothing (an empty
+FuncAnimation update returning [] on top of the static grid figure) -- that
+has been replaced.
 """
 
 import argparse
@@ -175,18 +180,54 @@ def main():
     sanity_dir.mkdir(parents=True, exist_ok=True)
     video_dir.mkdir(parents=True, exist_ok=True)
     png_path = sanity_dir / f"steps_comparison_{dist_name}.png"
-    mp4_path = video_dir / "steps_comparison.mp4"
+    mp4_path = video_dir / f"steps_comparison_{dist_name}.mp4"
     fig.savefig(png_path, dpi=130, bbox_inches="tight")
-
-    def update(_frame):
-        return []
-
-    anim = animation.FuncAnimation(fig, update, frames=48, blit=False)
-    anim.save(mp4_path, writer="ffmpeg", fps=24, dpi=130)
     plt.close(fig)
 
+    HOLD_FRAMES = 20
+    FADE_FRAMES = 8
+    n_segments = len(step_counts)
+    total_frames = n_segments * HOLD_FRAMES
+
+    anim_fig, anim_axes = plt.subplots(1, 2, figsize=(11, 6.2), dpi=130)
+    anim_rows = [
+        ("PF-ODE", pf_samples, pf_metrics, "#55A868"),
+        ("Flow Matching", fm_samples, fm_metrics, "#C44E52"),
+    ]
+    anim_scatters = []
+    for ax, (row_name, samples_by_n, metrics, color) in zip(anim_axes, anim_rows):
+        ax.scatter(real_m[:, 0], real_m[:, 1], s=4, alpha=0.15, color="#808080", linewidths=0, zorder=1)
+        sc = ax.scatter([], [], s=4, alpha=0.0, color=color, linewidths=0, zorder=2)
+        ax.set_xlim(-args.axis_limit, args.axis_limit)
+        ax.set_ylim(-args.axis_limit, args.axis_limit)
+        ax.set_aspect("equal")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(row_name, fontsize=12)
+        anim_scatters.append(sc)
+    suptitle = anim_fig.suptitle("", fontsize=13, y=0.99)
+    anim_fig.tight_layout(rect=[0, 0, 1, 0.86])
+
+    def update(frame_idx):
+        seg = min(frame_idx // HOLD_FRAMES, n_segments - 1)
+        within = frame_idx - seg * HOLD_FRAMES
+        fade = min(1.0, (within + 1) / FADE_FRAMES)
+        n_steps = step_counts[seg]
+        artists = []
+        for ax, sc, (row_name, samples_by_n, metrics, color) in zip(anim_axes, anim_scatters, anim_rows):
+            sc.set_offsets(samples_by_n[seg])
+            sc.set_alpha(0.42 * fade)
+            ax.set_title(f"{row_name}\nN={n_steps}  energy={metrics[seg]:.3f}", fontsize=12)
+            artists.append(sc)
+        suptitle.set_text(f"Step-count sweep - {dist_name}  (N={n_steps}, step {seg + 1}/{n_segments})")
+        return artists + [suptitle]
+
+    anim = animation.FuncAnimation(anim_fig, update, frames=total_frames, blit=False)
+    anim.save(mp4_path, writer="ffmpeg", fps=24, dpi=130)
+    plt.close(anim_fig)
+
     print(f"Saved {png_path.relative_to(PROJECT_ROOT)}")
-    print(f"Saved {mp4_path.relative_to(PROJECT_ROOT)}")
+    print(f"Saved {mp4_path.relative_to(PROJECT_ROOT)} ({total_frames} frames)")
     print("PF-ODE energy by N:", dict(zip(step_counts, [round(v, 6) for v in pf_metrics])))
     print("Flow Matching energy by N:", dict(zip(step_counts, [round(v, 6) for v in fm_metrics])))
 

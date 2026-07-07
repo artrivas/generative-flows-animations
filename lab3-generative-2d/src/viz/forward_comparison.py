@@ -15,22 +15,16 @@ Since z ~ N(0, I), x_t(z) has exactly the (mean, std) that marginal_prob
 predicts at every t -- this is a valid way to visualize the marginal
 evolution, just not a literal single Wiener-process sample path.
 
-VE's validated default (sigma_max=50, from step 2) makes its spread ~50x
-that of VP/sub-VP (~1), which would force shared axis limits so wide that
-VP/sub-VP collapse to an invisible dot. For THIS side-by-side visualization
-only, VE is instantiated with a smaller sigma_max (see VE_SIGMA_MAX below).
-The validated default is untouched everywhere else in the codebase.
-
-PACING FIX: the validated default beta_max=20 (from step 2) makes VP/sub-VP
-finish essentially their ENTIRE visible collapse within the first ~25% of
-the [0,1] range (std(0.3)~0.78, std(1)~0.9999 -- barely distinguishable),
-so a linearly-timed animation spent ~75% of its frames on an already-static
-blob. This was flagged as "doesn't seem to move" and confirmed by
-extracting real frames from the rendered mp4. Fix: use a smaller
-beta_max (BETA_MAX_COMPARE) for VP/sub-VP in THIS comparison only -- same
-principle already applied to VE_SIGMA_MAX above, just not applied
-consistently the first time. The validated beta_max=20 default is untouched
-everywhere else (forward_process validation, training, etc).
+REAL PRODUCTION HYPERPARAMETERS: VP/sub-VP use beta_max=20 and VE uses
+sigma_max=50, matching the validated defaults used everywhere else in the
+codebase (forward_process validation, training, sampling). An earlier
+version of this script secretly weakened these (beta_max=4, sigma_max=4)
+to make the plot "look nicer" -- that silently misrepresented the actual
+configured processes and has been removed. VE's real spread (~50x that of
+VP/sub-VP, whose std is bounded by 1) is handled with a symlog DISPLAY
+axis (see AXIS_LINTHRESH below) so both scales are readable in the same
+shared coordinate frame -- this rescales only how the plot is drawn, not
+the underlying process.
 """
 
 import argparse
@@ -64,8 +58,9 @@ N_PARTICLES = 1500
 N_FRAMES = 120
 FPS = 24
 SEED = 7
-VE_SIGMA_MAX = 4.0  # reduced from validated default (50) -- see module docstring
-BETA_MAX_COMPARE = 4.0  # reduced from validated default (20) -- see module docstring, pacing fix
+VE_SIGMA_MAX = 50.0  # real production default -- see module docstring
+BETA_MAX_COMPARE = 20.0  # real production default -- see module docstring
+AXIS_LINTHRESH = 2.0  # symlog linear region half-width (display-only rescaling)
 POINT_SIZE = 5
 ALPHA = 0.5
 COLOR = "#4C72B0"
@@ -121,13 +116,18 @@ def build_frames():
     return all_frames, t_values, axis_limit, list(processes.keys())
 
 
+def apply_symlog(ax, axis_limit):
+    ax.set_xscale("symlog", linthresh=AXIS_LINTHRESH)
+    ax.set_yscale("symlog", linthresh=AXIS_LINTHRESH)
+    ax.set_xlim(-axis_limit, axis_limit)
+    ax.set_ylim(-axis_limit, axis_limit)
+
+
 def make_figure(all_frames, axis_limit, names):
     fig, axes = plt.subplots(1, 3, figsize=(15, 5.2), dpi=120)
     scatters = {}
     for ax, name in zip(axes, names):
-        ax.set_xlim(-axis_limit, axis_limit)
-        ax.set_ylim(-axis_limit, axis_limit)
-        ax.set_aspect("equal")
+        apply_symlog(ax, axis_limit)
         ax.set_title(name, fontsize=13)
         ax.grid(True, linewidth=0.3, alpha=0.4)
         sc = ax.scatter([], [], s=POINT_SIZE, alpha=ALPHA, color=COLOR, linewidths=0)
@@ -146,9 +146,7 @@ def save_keyframes(all_frames, t_values, axis_limit, names):
             ax = axes[row, col]
             pts = all_frames[name][idx]
             ax.scatter(pts[:, 0], pts[:, 1], s=POINT_SIZE, alpha=ALPHA, color=COLOR, linewidths=0)
-            ax.set_xlim(-axis_limit, axis_limit)
-            ax.set_ylim(-axis_limit, axis_limit)
-            ax.set_aspect("equal")
+            apply_symlog(ax, axis_limit)
             ax.set_title(f"{name}  (t={t_values[idx]:.2f})", fontsize=11)
             ax.grid(True, linewidth=0.3, alpha=0.4)
 

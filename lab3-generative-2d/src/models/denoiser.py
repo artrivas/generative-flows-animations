@@ -81,10 +81,10 @@ def v_to_score(
     v_pred: torch.Tensor, x_t: torch.Tensor, alpha: torch.Tensor, std: torch.Tensor
 ) -> torch.Tensor:
     """
-    score = -(sqrt(alpha_bar_t) v_pred + sqrt(1-alpha_bar_t) x_t) / (1-alpha_bar_t).
+    score = -(sqrt(alpha_bar_t) v_pred + sqrt(1-alpha_bar_t) x_t) / sqrt(1-alpha_bar_t).
     NOTES.md §6. `alpha` = sqrt(alpha_bar_t) (VP's alpha(t)); `std` = sqrt(1-alpha_bar_t).
     """
-    return -(alpha * v_pred + std * x_t) / (std ** 2)
+    return -(alpha * v_pred + std * x_t) / std
 
 
 class DenoiserWrapper:
