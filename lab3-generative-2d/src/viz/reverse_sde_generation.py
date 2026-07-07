@@ -135,7 +135,7 @@ def main():
 
     anim = animation.FuncAnimation(fig, update, frames=len(trajectory), blit=False)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / "reverse_sde_generation.mp4"
+    out_path = OUT_DIR / f"reverse_sde_generation_{dist_name}_{param}.mp4"
     anim.save(out_path, writer="ffmpeg", fps=args.fps, dpi=120)
     plt.close(fig)
     print(f"Saved {out_path.relative_to(PROJECT_ROOT)}")
