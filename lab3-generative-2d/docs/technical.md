@@ -515,3 +515,32 @@ Se investigaron 4 hipótesis, cada una entrenada y verificada visualmente:
 **Hipótesis de causa raíz (no verificada, pendiente)**: el pinwheel tiene estructura angular muy fina (`angular_std=0.04` rad) — mucho más alta frecuencia que los 8 blobs o la curva de two_moons. Un MLP con embeddings axis-aligned (Cartesiano o Fourier estándar) puede tener "sesgo espectral" para representar esta componente rotacional; un embedding consciente de la geometría polar/rotacional (r, θ) en vez de (x, y) sería la vía más prometedora, junto con posible reponderación de la loss por SNR (similar a min-SNR-γ en la literatura de difusión) para priorizar el aprendizaje en t pequeño donde vive el detalle fino.
 
 **Estado**: se documenta como limitación conocida, no se fuerza una solución improvisada. El checkpoint actual (`pinwheel_eps_seed0.pt`, 4000 pasos) es equivalente en calidad al que había antes — no hay regresión, pero tampoco se resolvió el problema subyacente.
+
+---
+
+## 10. Cumplimiento del punto de entrada único y limitación conocida de densidad de puntos
+
+### 10.1 Punto de entrada único, carga de pesos existentes y parámetros configurables
+
+El enunciado exige "un punto de entrada que permita entrenar los modelos, cargar pesos existentes y regenerar cada animación", con distribución/modelo/sampler/pasos/semilla configurables sin modificar la lógica principal. Esto ya está implementado en `scripts/main.py`, con tres subcomandos:
+
+- `train --kind score --distribution <d> --model eps_pred|v_pred --steps <n> --seed <s>`
+- `sample --distribution <d> --model <m> --sampler reverse_sde|pf_ode|flow_matching_ode --steps <n> --seed <s>`
+- `animate --which <animación> --distribution <d> --model <m> --steps <n> --seed <s>`
+
+Todos los ejes pedidos son flags de `argparse` (`scripts/main.py:234-278`); no hay que tocar código interno para cambiarlos. `sample`/`animate` cargan pesos existentes por defecto vía `default_score_checkpoint`/`default_flow_checkpoint` (`scripts/main.py:69-77`) o aceptan `--checkpoint` explícito — no reentrenan a menos que se invoque `train` explícitamente. Las instrucciones de instalación, entrenamiento y generación de resultados están en `README.md` (secciones "Main CLI", "Available Names", "Regenerate Animations").
+
+### 10.2 Densidad de puntos en animaciones de trayectorias — limitación conocida, no resuelta
+
+Los 4 scripts que animan trayectorias individuales (ruido → dato) usan pocas partículas por diseño:
+
+| Script | Partículas |
+|---|---|
+| `reverse_sde_generation.py` | 60 |
+| `pf_ode_generation.py` | 60 |
+| `flow_matching_animation.py` | 60 |
+| `forward_trajectories.py` | 40 |
+
+La razón es visual: con más partículas, las líneas de trayectoria ("comet-tail") se superponen y el video se vuelve ilegible. El costo de ese diseño es que el frame final ("data") de esos 4 videos muestra pocos puntos — para `pinwheel` (5 brazos) son ~12 puntos por brazo, insuficiente para apreciar bien la forma final de la distribución. Esto NO afecta a los plots estáticos usados para juzgar calidad cuantitativamente (`sampler_comparison_*.png` usa 2000-5000 puntos, `steps_comparison_*` usa 1200), que sí se ven densos y claros.
+
+**Posible mejora futura (no implementada)**: animación de dos capas — mantener las 40-60 trayectorias con línea visible, y superponer una nube más densa (500-1000 puntos) sin trazo (solo posición, sin cometa) que llene la forma final sin ensuciar el video con más líneas. Se documenta como limitación conocida en vez de forzar un cambio no solicitado, dado el trade-off (duplica el costo de sampling y requiere tocar los 4 scripts).

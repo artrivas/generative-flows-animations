@@ -164,7 +164,7 @@ $$
 \nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t) \approx -\frac{\boldsymbol{\varepsilon}_\theta(\mathbf{x}_t, t)}{\sqrt{1 - \bar{\alpha}_t}}
 $$
 
-**Archivo/clase de implementación**: `src/models/score_net.py` → clase `EpsilonNet`, función `epsilon_to_score`
+**Archivo/clase de implementación**: `src/models/denoiser.py` → clase `Denoiser` (interpretado como ε-pred vía `DenoiserWrapper(param="eps")`), función `epsilon_to_score`
 
 ---
 
@@ -203,7 +203,7 @@ $$
 \nabla_{\mathbf{x}_t}\log p_t(\mathbf{x}_t) = -\frac{\boldsymbol{\varepsilon}_\theta(\mathbf{x}_t,t)}{\sqrt{1-\bar{\alpha}_t}} = -\frac{\sqrt{\bar{\alpha}_t}\,\mathbf{v}_\theta(\mathbf{x}_t,t) + \sqrt{1-\bar{\alpha}_t}\,\mathbf{x}_t}{\sqrt{1-\bar{\alpha}_t}}
 $$
 
-**Archivo/clase de implementación**: `src/models/score_net.py` → clase `VNet`, función `v_to_score`
+**Archivo/clase de implementación**: `src/models/denoiser.py` → clase `Denoiser` (interpretado como v-pred vía `DenoiserWrapper(param="v")`), función `v_to_score`
 
 ---
 
@@ -232,7 +232,7 @@ $$
 
 **Uso en visualización**: Las trayectorias de la ODE serán comparadas con las de la SDE en los videos del paso 12.
 
-**Archivo/clase de implementación**: `src/integrators/ode_integrator.py` → clase `ProbabilityFlowODE`
+**Archivo/clase de implementación**: `src/sampling/pf_ode.py` → función `sample_pf_ode` (usa los integradores genéricos `euler_step`/`heun_step` de `src/integrators/steps.py` y `probability_flow_drift` de `src/sampling/utils.py`)
 
 ### SDE reversa (estocástica, distinta de la Probability Flow ODE)
 
@@ -284,7 +284,7 @@ $$
 
 La variante OT-CFM (Liu et al. 2022 / Tong et al. 2023) emparea óptimamente $\mathbf{x}_0$ y $\mathbf{x}_1$ para reducir varianza. En este lab implementaremos primero la variante estándar (pares independientes).
 
-**Archivo/clase de implementación**: `src/forward_process/flow_matching.py` → clase `LinearFlowMatching`; `src/models/velocity_net.py` → clase `VelocityNet`
+**Archivo/clase de implementación**: interpolación lineal implementada inline en el loop de entrenamiento de `src/training/train_flow_matching.py` (sin clase `ForwardProcess` separada); `src/models/velocity_field.py` → clase `VelocityField`; sampling en `src/sampling/flow_matching_ode.py` → función `sample_flow_matching_ode`
 
 ---
 
@@ -298,11 +298,14 @@ La variante OT-CFM (Liu et al. 2022 / Tong et al. 2023) emparea óptimamente $\m
 | VE SDE | `src/forward_process/ve_sde.py` | `VESDE` |
 | sub-VP SDE | `src/forward_process/subvp_sde.py` | `SubVPSDE` |
 | Kernels analíticos | `src/forward_process/kernels.py` | `vp_transition_kernel`, `ve_transition_kernel`, `subvp_transition_kernel` (derivado) |
-| ε-net + conversión | `src/models/score_net.py` | `EpsilonNet`, `epsilon_to_score` |
-| v-net + conversión | `src/models/score_net.py` | `VNet`, `v_to_score` |
-| Probability Flow ODE | `src/integrators/ode_integrator.py` | `ProbabilityFlowODE` |
-| Flow Matching | `src/forward_process/flow_matching.py` | `LinearFlowMatching` |
-| Velocity Net | `src/models/velocity_net.py` | `VelocityNet` |
+| ε-net + conversión | `src/models/denoiser.py` | `Denoiser`, `DenoiserWrapper`, `epsilon_to_score` |
+| v-net + conversión | `src/models/denoiser.py` | `Denoiser`, `DenoiserWrapper`, `v_to_score` |
+| Integradores genéricos (Euler/Heun/Euler-Maruyama) | `src/integrators/steps.py` | `euler_step`, `heun_step`, `euler_maruyama_step` |
+| Probability Flow ODE (sampling) | `src/sampling/pf_ode.py` | `sample_pf_ode` |
+| Reverse-time SDE (sampling) | `src/sampling/reverse_sde.py` | `sample_reverse_sde` |
+| Flow Matching (entrenamiento) | `src/training/train_flow_matching.py` | inline, sin clase separada |
+| Flow Matching (sampling) | `src/sampling/flow_matching_ode.py` | `sample_flow_matching_ode`, `load_velocity_model` |
+| Velocity Net | `src/models/velocity_field.py` | `VelocityField` |
 
 ---
 
