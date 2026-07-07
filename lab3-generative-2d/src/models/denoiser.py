@@ -38,11 +38,24 @@ def sinusoidal_time_embedding(t: torch.Tensor, dim: int) -> torch.Tensor:
 
 class Denoiser(nn.Module):
     """
-    MLP: input = concat(x, sinusoidal_time_embedding(t)) -> R^{data_dim}.
+    MLP: input = concat(x, [fourier_features(x)], sinusoidal_time_embedding(t))
+    -> R^{data_dim}.
 
     The network is parametrization-agnostic; whether its output means
     "eps" or "v" is a property of how it was trained (see train_score.py)
     and is only interpreted downstream by DenoiserWrapper.
+
+    Optional Gaussian random Fourier features on (x, y) (pos_emb_dim > 0):
+    an EARLIER attempt at this (docs/technical.md §9.4, for the pinwheel
+    "isotropic blob" failure) used standard axis-aligned per-coordinate
+    sinusoids (sin/cos of x*freq_i and y*freq_i separately) and introduced
+    grid-like axis-aligned periodicity artifacts. This uses the Tancik et
+    al. 2020 "Fourier Features" random-projection form instead: features
+    are sin/cos of x @ B^T for a FIXED random (non-trainable) matrix B
+    with entries ~ N(0, pos_emb_scale^2), i.e. projected onto random
+    (non-axis-aligned) directions before taking sin/cos -- this is the
+    standard fix for axis-aligned grid artifacts in the literature. B is
+    registered as a buffer so it round-trips through the checkpoint.
     """
 
     def __init__(
@@ -51,12 +64,22 @@ class Denoiser(nn.Module):
         time_emb_dim: int = 32,
         hidden_dim: int = 128,
         n_layers: int = 4,
+        pos_emb_dim: int = 0,
+        pos_emb_scale: float = 10.0,
+        pos_emb_seed: int = 0,
     ):
         super().__init__()
         self.time_emb_dim = time_emb_dim
+        self.pos_emb_dim = pos_emb_dim
+
+        in_dim = data_dim + time_emb_dim
+        if pos_emb_dim > 0:
+            gen = torch.Generator().manual_seed(pos_emb_seed)
+            B = torch.randn(pos_emb_dim, data_dim, generator=gen) * pos_emb_scale
+            self.register_buffer("fourier_B", B)
+            in_dim += 2 * pos_emb_dim
 
         layers = []
-        in_dim = data_dim + time_emb_dim
         for _ in range(n_layers - 1):
             layers += [nn.Linear(in_dim, hidden_dim), nn.SiLU()]
             in_dim = hidden_dim
@@ -65,7 +88,12 @@ class Denoiser(nn.Module):
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         t_emb = sinusoidal_time_embedding(t, self.time_emb_dim)
-        h = torch.cat([x, t_emb], dim=-1)
+        if self.pos_emb_dim > 0:
+            proj = 2 * math.pi * (x @ self.fourier_B.t())
+            pos_emb = torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+            h = torch.cat([x, pos_emb, t_emb], dim=-1)
+        else:
+            h = torch.cat([x, t_emb], dim=-1)
         return self.net(h)
 
 

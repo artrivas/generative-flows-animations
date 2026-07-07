@@ -74,6 +74,9 @@ def load_wrapper(checkpoint_path: str):
         time_emb_dim=config["time_emb_dim"],
         hidden_dim=config["hidden_dim"],
         n_layers=config["n_layers"],
+        pos_emb_dim=config.get("pos_emb_dim", 0),
+        pos_emb_scale=config.get("pos_emb_scale", 10.0),
+        pos_emb_seed=config.get("seed", 0),
     ).to(DEVICE)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()

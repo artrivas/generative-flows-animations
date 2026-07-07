@@ -68,6 +68,17 @@ def parse_args():
         help="optional suffix appended to the checkpoint name (e.g. 'snr') to avoid "
              "overwriting an existing checkpoint for the same distribution/param/seed",
     )
+    p.add_argument(
+        "--pos_emb_dim", type=int, default=0,
+        help="if > 0, add this many random Gaussian Fourier features on (x,y) "
+             "(Tancik et al. 2020 style random-projection form, not axis-aligned "
+             "per-coordinate sinusoids). 0 (default) = disabled, unchanged from before.",
+    )
+    p.add_argument(
+        "--pos_emb_scale", type=float, default=10.0,
+        help="stddev of the random Fourier projection matrix B (only used if "
+             "pos_emb_dim > 0); controls the spatial frequency range covered.",
+    )
     return p.parse_args()
 
 
@@ -92,6 +103,9 @@ def main():
         time_emb_dim=args.time_emb_dim,
         hidden_dim=args.hidden_dim,
         n_layers=args.n_layers,
+        pos_emb_dim=args.pos_emb_dim,
+        pos_emb_scale=args.pos_emb_scale,
+        pos_emb_seed=args.seed,
     ).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
